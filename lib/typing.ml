@@ -45,7 +45,7 @@ let add_var ctx name ty =
   Hashtbl.add ctx.venv.current name (Var_entry ty)
 
 let rec venv_lookup ctx v k =
-  debug ctx "Ctx.venv_lookup";
+  debug ctx "venv_lookup";
   match Hashtbl.find_opt v.current k with
   | Some entry -> Some entry
   | None ->
@@ -64,7 +64,7 @@ let find_fun ctx name =
   | _ -> None
 
 let push_scope ctx =
-  debug ctx "Ctx.push_scope";
+  debug ctx "push_scope";
   let new_venv =
     {
       parent = Some ctx.venv ;
@@ -76,7 +76,7 @@ let push_scope ctx =
 exception Scope_pop_toplevel
 
 let pop_scope ctx =
-  debug ctx "Ctx.pop_scope";
+  debug ctx "pop_scope";
   let old_venv = ctx.venv.parent in
   match old_venv with
   | Some v -> ctx.venv <- v;
