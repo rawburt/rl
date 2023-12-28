@@ -103,6 +103,8 @@ type ctx = {
   debug : bool
 }
 
+(* TODO: underscore _ naming scheme *)
+(* TODO: Parse_error with error types instead of string *)
 exception ParseError of string * pos
 exception NotImplemented
 

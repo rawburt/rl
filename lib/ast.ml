@@ -56,21 +56,3 @@ type typedecl = {
 type decl =
   | Fun_decl of fundecl
   | Type_decl of typedecl
-
-(* string functions *)
-
-let string_of_binop = function
-  | Plus_binop -> "+"
-  | Minus_binop -> "-"
-  | Times_binop -> "*"
-  | Divide_binop -> "/"
-  | Eq_binop -> "=="
-  | Neq_binop -> "!="
-  | Lt_binop -> "<"
-  | Le_binop -> "<-"
-  | Gt_binop -> ">"
-  | Ge_binop -> ">="
-
-let string_of_unop = function
-  | Not_unop -> "!"
-  | Neg_unop -> "-"

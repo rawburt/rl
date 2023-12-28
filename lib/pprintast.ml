@@ -1,6 +1,22 @@
 open Ast
 open Format
 
+let pp_binop ppf = function
+  | Plus_binop -> fprintf ppf "+"
+  | Minus_binop -> fprintf ppf "-"
+  | Times_binop -> fprintf ppf "*"
+  | Divide_binop -> fprintf ppf "/"
+  | Eq_binop -> fprintf ppf "=="
+  | Neq_binop -> fprintf ppf "!="
+  | Lt_binop -> fprintf ppf "<"
+  | Le_binop -> fprintf ppf "<-"
+  | Gt_binop -> fprintf ppf ">"
+  | Ge_binop -> fprintf ppf ">="
+
+let pp_unop ppf = function
+  | Not_unop -> fprintf ppf "!"
+  | Neg_unop -> fprintf ppf "-"
+
 let rec pp_let_expr ppf name expr =
   fprintf ppf "@[%s = %a@]" name pp_expr expr
 
@@ -16,13 +32,13 @@ and pp_while_expr ppf cond_expr body_expr =
     pp_expr_list body_expr
 
 and pp_binop_expr ppf binop lhs_expr rhs_expr =
-  fprintf ppf "%a %s %a"
+  fprintf ppf "%a %a %a"
     pp_expr lhs_expr
-    (string_of_binop binop)
+    pp_binop binop
     pp_expr rhs_expr
 
 and pp_unop_expr ppf unop expr =
-  fprintf ppf "%s %a" (string_of_unop unop) pp_expr expr
+  fprintf ppf "%a %a" pp_unop unop pp_expr expr
 
 and pp_call_expr ppf name args =
   fprintf ppf "%s(%a)" name pp_call_args args
