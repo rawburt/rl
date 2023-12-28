@@ -103,35 +103,17 @@ type ctx = {
   debug : bool
 }
 
-(* TODO: underscore _ naming scheme *)
-(* TODO: Parse_error with error types instead of string *)
-exception ParseError of string * pos
-exception NotImplemented
+type parse_error =
+  | Unexpected_token of token * token
+  | Expected_ident of token
+  | Expected_decl of token
+  | Expected_statement of token
+  | Expected_expression
+  | Expected_binop of token
 
-let error_unexpected_token expected got pos =
-  let expected_s = string_of_token expected in
-  let got_s = string_of_token got in
-  let message = Printf.sprintf "unexpected token: %s | expected: %s" got_s expected_s in
-  raise (ParseError (message, pos))
+exception Parse_error of parse_error * pos
 
-let error_expected_ident got pos =
-  let got_s = string_of_token got in
-  let message = Printf.sprintf "expected identifier but got: %s" got_s in
-  raise (ParseError (message, pos))
-
-let error_expected_decl got pos =
-  let got_s = string_of_token got in
-  let message = Printf.sprintf "expected top level declaration but got: %s" got_s in
-  raise (ParseError (message, pos))
-
-let error_expected_statement got pos =
-  let got_s = string_of_token got in
-  let message = Printf.sprintf "expected a statement but got: %s" got_s in
-  raise (ParseError (message, pos))
-
-let error_expected_expression pos =
-  let message = "expected expression but none was found" in
-  raise (ParseError (message, pos))
+exception Not_implemented
 
 let debug ctx msg = if ctx.debug then print_endline msg
 
@@ -167,12 +149,12 @@ let expect_id ctx =
   debug ctx "expect_id";
   match advance ctx with
   | ID id -> id
-  | t -> error_expected_ident t (pos ctx)
+  | t -> raise (Parse_error (Expected_ident t, pos ctx))
 
 let expect ctx token =
   debug ctx ("expect " ^ string_of_token token);
   let t = advance ctx in
-  if t <> token then error_unexpected_token token t (pos ctx)
+  if t <> token then raise (Parse_error (Unexpected_token (token, t), pos ctx))
 
 let binop_from_token ctx = function
   | PLUS -> Plus_binop
@@ -185,7 +167,7 @@ let binop_from_token ctx = function
   | LE -> Le_binop
   | GT -> Gt_binop
   | GE -> Ge_binop
-  | t -> raise (ParseError (("expected binary operator but got: " ^ string_of_token t), pos ctx))
+  | t -> raise (Parse_error (Expected_binop t, pos ctx))
 
 let binop_expression ctx op lhs rhs =
   debug ctx "binop_expression";
@@ -198,7 +180,7 @@ let binop_expression ctx op lhs rhs =
 let rec maybe_expression_list ctx =
   let rec expression_list es =
     match parse_expression ctx with
-    | None -> raise (ParseError ("expected another expression after comma", pos ctx))
+    | None -> raise (Parse_error (Expected_expression, pos ctx))
     | Some e ->
       match peek ctx with
       | COMMA ->
@@ -245,7 +227,7 @@ and expect_expression ctx =
   debug ctx "expect_expression";
   match base_expression ctx with
   | Some e -> e
-  | None -> raise (ParseError ("expected expression", pos ctx))
+  | None -> raise (Parse_error (Expected_expression, pos ctx))
 
 and parse_expression_1 ctx init_lhs min_prec =
   debug ctx "parse_expression_1";
@@ -286,7 +268,7 @@ let assignment_statement name ctx =
   debug ctx "assignment_statement";
   expect ctx EQUAL;
   match parse_expression ctx with
-  | None -> error_expected_expression (pos ctx)
+  | None -> raise (Parse_error (Expected_expression, pos ctx))
   | Some expr -> Let_expr (name, expr, pos ctx)
 
 let rec while_statement ctx =
@@ -294,7 +276,7 @@ let rec while_statement ctx =
   let wpos = pos ctx in
   expect ctx WHILE;
   match parse_expression ctx with
-  | None -> error_expected_expression (pos ctx)
+  | None -> raise (Parse_error (Expected_expression, pos ctx))
   | Some cond ->
     expect ctx DO;
     let stmt_list = statement_list ctx in
@@ -381,7 +363,7 @@ let scan_fun_decl ctx =
     fundecl_pos = fpos ;
   }
 
-let scan_type_decl _ctx = raise NotImplemented
+let scan_type_decl _ctx = raise Not_implemented
 
 let scan_program read_token lexbuf cfg_debug =
   let ctx = { lexbuf ; read_token ; peek = None ; debug = cfg_debug } in
@@ -395,6 +377,6 @@ let scan_program read_token lexbuf cfg_debug =
     | TYPE ->
       let tdec = scan_type_decl ctx in
       tdec :: (program ())
-    | t -> error_expected_decl t (pos ctx)
+    | t -> raise (Parse_error (Expected_decl t, pos ctx))
   in
   program ()
