@@ -221,6 +221,12 @@ and base_expression ctx =
   | NUMBER n ->
     eat_peek ctx;
     Some (Number_expr (n, pos ctx))
+  | TRUE ->
+    eat_peek ctx;
+    Some (Bool_expr (true, pos ctx))
+  | FALSE ->
+    eat_peek ctx;
+    Some (Bool_expr (false, pos ctx))
   | _ -> None
 
 and expect_expression ctx =
@@ -283,6 +289,20 @@ let rec while_statement ctx =
     expect ctx END;
     While_expr (cond, stmt_list, wpos)
 
+and if_statement ctx =
+  debug ctx "if_statement";
+  let ipos = pos ctx in
+  expect ctx IF;
+  match parse_expression ctx with
+  | None -> raise (Parse_error (Expected_expression, pos ctx))
+  | Some cond ->
+    expect ctx DO;
+    let then_stmt_list = statement_list ctx in
+    expect ctx ELSE;
+    let else_stmt_list = statement_list ctx in
+    expect ctx END;
+    If_expr (cond, then_stmt_list, else_stmt_list, ipos)
+
 and statement ctx =
   debug ctx "statement";
   match peek ctx with
@@ -295,6 +315,7 @@ and statement ctx =
       | _ -> Some (Var_expr (name, pos ctx))
     end
   | WHILE -> Some (while_statement ctx)
+  | IF -> Some (if_statement ctx)
   | _ -> None
 
 and statement_list ctx =

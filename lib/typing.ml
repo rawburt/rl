@@ -161,10 +161,10 @@ and typecheck_if_expr cond_expr then_exprs else_exprs pos =
   if cond_expr_ty <> Bool_ty then
     raise (Type_error (If_cond_bool cond_expr_ty, pos))
   else
-    Ctx.pop_scope ();
+    Ctx.push_scope ();
     let then_exprs_type = typecheck_exprs then_exprs in
     Ctx.pop_scope ();
-    Ctx.pop_scope ();
+    Ctx.push_scope ();
     let else_exprs_type = typecheck_exprs else_exprs in
     Ctx.pop_scope ();
     if then_exprs_type = else_exprs_type then then_exprs_type else
