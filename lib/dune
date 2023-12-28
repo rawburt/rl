@@ -1,0 +1,5 @@
+(library
+ (name rl)
+ (modules ast types env lexer scanner parsing pprintast type_checker))
+
+(ocamllex lexer)
