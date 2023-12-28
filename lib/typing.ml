@@ -1,105 +1,86 @@
 open Ast
 open Types
 
-module Ctx : sig
-  val tenv_lookup : string -> ty option
+type entry =
+  | Var_entry of ty
+  | Fun_entry of ty list * ty
+type venv = (string, entry) Hashtbl.t
+type scoped_venv = {
+  parent : scoped_venv option ;
+  current : venv ;
+}
+type tenv = (string, ty) Hashtbl.t
 
-  val add_fun : string -> ty list -> ty -> unit
-  val add_var : string -> ty -> unit
+let base_tenv =
+  List.to_seq [
+    ("unit", Unit_ty) ;
+    ("number", Number_ty) ;
+    ("bool", Bool_ty) ;
+    ("string", String_ty) ;
+  ]
+  |> Hashtbl.of_seq
 
-  val find_fun : string -> (ty list * ty) option
-  val find_var : string -> ty option
+let base_venv =
+  List.to_seq [
+    ("output", Fun_entry ([Any_ty], Unit_ty)) ;
+  ]
+  |> Hashtbl.of_seq
 
-  val push_scope : unit -> unit
-  exception Scope_pop_toplevel
-  val pop_scope : unit -> unit
+type ctx = {
+  tenv : tenv ;
+  mutable venv : scoped_venv ;
+  debug : bool
+}
 
-  val debug : string -> unit
-  val set_debug : bool -> unit
-end = struct
-  type entry =
-    | Var_entry of ty
-    | Fun_entry of ty list * ty
-  type venv = (string, entry) Hashtbl.t
-  type scoped_venv = {
-    parent : scoped_venv option ;
-    current : venv ;
-  }
+let debug ctx str =
+  if ctx.debug then print_endline str
 
-  (* mutates when new types are added *)
-  let tenv =
-    List.to_seq [
-      ("unit", Unit_ty) ;
-      ("number", Number_ty) ;
-      ("bool", Bool_ty) ;
-      ("string", String_ty) ;
-    ]
-    |> Hashtbl.of_seq
+let tenv_lookup ctx name =
+  Hashtbl.find_opt ctx.tenv name
 
-  (* mutates on scope change and when entries are added *)
-  let venv = ref {
-    parent = None ;
-    current =
-      List.to_seq [
-        ("output", Fun_entry ([Any_ty], Unit_ty)) ;
-      ]
-      |> Hashtbl.of_seq
-  }
+let add_fun ctx name params result =
+  Hashtbl.add ctx.venv.current name (Fun_entry (params, result))
 
-  let debugging = ref true
+let add_var ctx name ty =
+  Hashtbl.add ctx.venv.current name (Var_entry ty)
 
-  let set_debug d = debugging := d
+let rec venv_lookup ctx v k =
+  debug ctx "Ctx.venv_lookup";
+  match Hashtbl.find_opt v.current k with
+  | Some entry -> Some entry
+  | None ->
+    match v.parent with
+    | Some parent -> venv_lookup ctx parent k
+    | None -> None
 
-  let debug str =
-    if !debugging then print_endline str
+let find_var ctx name =
+  match venv_lookup ctx ctx.venv name with
+  | Some (Var_entry ty) -> Some ty
+  | _ -> None
 
-  let tenv_lookup name =
-    Hashtbl.find_opt tenv name
+let find_fun ctx name =
+  match venv_lookup ctx ctx.venv name with
+  | Some (Fun_entry (args, result)) -> Some (args, result)
+  | _ -> None
 
-  let add_fun name params result =
-    Hashtbl.add !venv.current name (Fun_entry (params, result))
+let push_scope ctx =
+  debug ctx "Ctx.push_scope";
+  let new_venv =
+    {
+      parent = Some ctx.venv ;
+      current = Hashtbl.create 11
+    }
+  in
+  ctx.venv <- new_venv;
 
-  let add_var name ty =
-    Hashtbl.add !venv.current name (Var_entry ty)
+exception Scope_pop_toplevel
 
-  let rec venv_lookup v k =
-    debug "Ctx.venv_lookup";
-    match Hashtbl.find_opt v.current k with
-    | Some entry -> Some entry
-    | None ->
-      match v.parent with
-      | Some parent -> venv_lookup parent k
-      | None -> None
-
-  let find_var name =
-    match venv_lookup !venv name with
-    | Some (Var_entry ty) -> Some ty
-    | _ -> None
-
-  let find_fun name =
-    match venv_lookup !venv name with
-    | Some (Fun_entry (args, result)) -> Some (args, result)
-    | _ -> None
-
-  let push_scope () =
-    debug "Ctx.push_scope";
-    let new_venv =
-      {
-        parent = Some !venv ;
-        current = Hashtbl.create 11
-      }
-    in
-    venv := new_venv;
-
-  exception Scope_pop_toplevel
-
-  let pop_scope () =
-    debug "Ctx.pop_scope";
-    let old_venv = (!venv).parent in
-    match old_venv with
-    | Some v -> venv := v;
-    | None -> raise Scope_pop_toplevel
-end
+let pop_scope ctx =
+  debug ctx "Ctx.pop_scope";
+  let old_venv = ctx.venv.parent in
+  match old_venv with
+  | Some v -> ctx.venv <- v;
+  | None -> raise Scope_pop_toplevel
 
 (* pairs are in the form of (expected, got) *)
 type type_error =
@@ -121,70 +102,70 @@ exception Type_error of type_error * pos
 
 exception Not_implemented
 
-let rec typecheck_expr = function
+let rec typecheck_expr ctx = function
   | Bool_expr _ -> Bool_ty
   | Number_expr _ -> Number_ty
   | String_expr _ -> String_ty
   | Var_expr (name, pos) -> begin
-    match Ctx.find_var name with
+    match find_var ctx name with
     | Some ty -> ty
     | None -> raise (Type_error (Var_not_found name, pos))
   end
   | Let_expr (name, expr, pos) ->
-    typecheck_let_expr name expr pos
+    typecheck_let_expr ctx name expr pos
   | If_expr (cond_expr, then_exprs, else_exprs, pos) ->
-    typecheck_if_expr cond_expr then_exprs else_exprs pos
+    typecheck_if_expr ctx cond_expr then_exprs else_exprs pos
   | While_expr (cond_expr, body_exprs, pos) ->
-    typecheck_while_expr cond_expr body_exprs pos
+    typecheck_while_expr ctx cond_expr body_exprs pos
   | Binop_expr (binop, lhs_expr, rhs_expr, pos) ->
-    typecheck_binop_expr binop lhs_expr rhs_expr pos
+    typecheck_binop_expr ctx binop lhs_expr rhs_expr pos
   | Unop_expr (unop, expr, pos) ->
-    typecheck_unop_expr unop expr pos
+    typecheck_unop_expr ctx unop expr pos
   | Call_expr (name, args, pos) ->
-    typecheck_call_expr name args pos
+    typecheck_call_expr ctx name args pos
 
-and typecheck_let_expr name expr pos =
-  Ctx.debug "typecheck_let_expr";
-  let expr_ty = typecheck_expr expr in
-    match Ctx.find_var name with
+and typecheck_let_expr ctx name expr pos =
+  debug ctx "typecheck_let_expr";
+  let expr_ty = typecheck_expr ctx expr in
+    match find_var ctx name with
     | Some ty ->
       (* mutating a var is OK if types are the same *)
       if ty = expr_ty then ty else
         raise (Type_error (Let_mutation (ty, expr_ty), pos))
     | None ->
-      Ctx.add_var name expr_ty;
+      add_var ctx name expr_ty;
       expr_ty
 
-and typecheck_if_expr cond_expr then_exprs else_exprs pos =
-  Ctx.debug "typecheck_if_expr";
-  let cond_expr_ty = typecheck_expr cond_expr in
+and typecheck_if_expr ctx cond_expr then_exprs else_exprs pos =
+  debug ctx "typecheck_if_expr";
+  let cond_expr_ty = typecheck_expr ctx cond_expr in
   if cond_expr_ty <> Bool_ty then
     raise (Type_error (If_cond_bool cond_expr_ty, pos))
   else
-    Ctx.push_scope ();
-    let then_exprs_type = typecheck_exprs then_exprs in
-    Ctx.pop_scope ();
-    Ctx.push_scope ();
-    let else_exprs_type = typecheck_exprs else_exprs in
-    Ctx.pop_scope ();
+    push_scope ctx;
+    let then_exprs_type = typecheck_exprs ctx then_exprs in
+    pop_scope ctx;
+    push_scope ctx;
+    let else_exprs_type = typecheck_exprs ctx else_exprs in
+    pop_scope ctx;
     if then_exprs_type = else_exprs_type then then_exprs_type else
       raise (Type_error (If_branches_mismatch (then_exprs_type, else_exprs_type), pos))
 
-and typecheck_while_expr cond_expr body_exprs pos =
-  Ctx.debug "typecheck_while_expr";
-  let cond_expr_ty = typecheck_expr cond_expr in
+and typecheck_while_expr ctx cond_expr body_exprs pos =
+  debug ctx "typecheck_while_expr";
+  let cond_expr_ty = typecheck_expr ctx cond_expr in
   if cond_expr_ty <> Bool_ty then
     raise (Type_error (While_cond_bool cond_expr_ty, pos))
   else
-    Ctx.push_scope ();
-    let body_exprs_type = typecheck_exprs body_exprs in
-    Ctx.pop_scope ();
+    push_scope ctx;
+    let body_exprs_type = typecheck_exprs ctx body_exprs in
+    pop_scope ctx;
     body_exprs_type
 
-and typecheck_binop_expr binop lhs_expr rhs_expr pos =
-  Ctx.debug "typecheck_binop_expr";
-  let lhs_expr_type = typecheck_expr lhs_expr in
-  let rhs_expr_type = typecheck_expr rhs_expr in
+and typecheck_binop_expr ctx binop lhs_expr rhs_expr pos =
+  debug ctx "typecheck_binop_expr";
+  let lhs_expr_type = typecheck_expr ctx lhs_expr in
+  let rhs_expr_type = typecheck_expr ctx rhs_expr in
   match binop with
   (* (num * num) -> num *)
   | Plus_binop | Minus_binop
@@ -206,9 +187,9 @@ and typecheck_binop_expr binop lhs_expr rhs_expr pos =
     if lhs_expr_type = rhs_expr_type then Bool_ty else
       raise (Type_error (Binop_expr_match (binop, lhs_expr_type, rhs_expr_type), pos))
 
-and typecheck_unop_expr unop expr pos =
-  Ctx.debug "typecheck_unop_expr";
-  let expr_type = typecheck_expr expr in
+and typecheck_unop_expr ctx unop expr pos =
+  debug ctx "typecheck_unop_expr";
+  let expr_type = typecheck_expr ctx expr in
   match unop with
   | Not_unop ->
     if expr_type = Bool_ty then Bool_ty else
@@ -217,16 +198,16 @@ and typecheck_unop_expr unop expr pos =
     if expr_type = Number_ty then Number_ty else
       raise (Type_error (Unop_mismatch (unop, Number_ty, expr_type), pos))
 
-and typecheck_call_expr name args pos =
-  Ctx.debug "typecheck_call_expr";
-  match Ctx.find_fun name with
+and typecheck_call_expr ctx name args pos =
+  debug ctx "typecheck_call_expr";
+  match find_fun ctx name with
   | Some (param_types, result_type) ->
     let given_arg_length = List.length args in
     let defined_arg_length = List.length param_types in
     if given_arg_length <> defined_arg_length then
       raise (Type_error (Call_arg_size (name, defined_arg_length, given_arg_length), pos))
     else
-      let arg_types = List.map typecheck_expr args in
+      let arg_types = List.map (typecheck_expr ctx) args in
       let compare_args (defined, passed) =
         if defined = Any_ty then true else defined = passed
       in
@@ -237,61 +218,69 @@ and typecheck_call_expr name args pos =
     raise (Type_error (Fun_not_found name, pos))
 
 (* type check expressions in list and return the last expression type *)
-and typecheck_exprs = function
+and typecheck_exprs ctx = function
   (* empty blocks are of type unit *)
   | [] -> Unit_ty
-  | [expr] -> typecheck_expr expr
+  | [expr] -> typecheck_expr ctx expr
   | expr :: exprs ->
-    let _ = typecheck_expr expr in
-    typecheck_exprs exprs
+    let _ = typecheck_expr ctx expr in
+    typecheck_exprs ctx exprs
 
-let get_typed_field field =
-  Ctx.debug "get_typed_field";
-  match Ctx.tenv_lookup field.field_type with
+let get_typed_field ctx field =
+  debug ctx "get_typed_field";
+  match tenv_lookup ctx field.field_type with
   | Some ty -> (field.field_name, ty)
   | None -> raise (Type_error (Type_not_found field.field_type, field.field_pos))
 
-let fun_decl_result_type f =
-  Ctx.debug "fun_decl_result_type";
-  match Ctx.tenv_lookup f.fundecl_result with
+let fun_decl_result_type ctx f =
+  debug ctx "fun_decl_result_type";
+  match tenv_lookup ctx f.fundecl_result with
     | Some ty -> ty
     | None -> raise (Type_error (Type_not_found f.fundecl_result, f.fundecl_pos))
 
-let typecheck_fun_decl f =
-  Ctx.debug "typecheck_fun_decl";
-  let params_with_type = List.map get_typed_field f.fundecl_params in
-  let load_param (name, ty) = Ctx.add_var name ty in
-  Ctx.push_scope ();
+let typecheck_fun_decl ctx f =
+  debug ctx "typecheck_fun_decl";
+  let params_with_type = List.map (get_typed_field ctx) f.fundecl_params in
+  let load_param (name, ty) = add_var ctx name ty in
+  push_scope ctx;
   List.iter load_param params_with_type;
-  let body_type = typecheck_exprs f.fundecl_body in
-  let result_type = fun_decl_result_type f in
-  Ctx.pop_scope ();
+  let body_type = typecheck_exprs ctx f.fundecl_body in
+  let result_type = fun_decl_result_type ctx f in
+  pop_scope ctx;
   (* functions defined as unit result type will ignore the body type because there is no return value *)
   if result_type <> Unit_ty && body_type <> result_type then
     raise (Type_error (Neq_fun_body (result_type, body_type), f.fundecl_pos))
 
-let rec typecheck_decls = function
+let rec typecheck_decls ctx = function
   | [] -> ()
   | Fun_decl f :: decls ->
-    typecheck_fun_decl f;
-    typecheck_decls decls
+    typecheck_fun_decl ctx f;
+    typecheck_decls ctx decls
   | _ -> raise Not_implemented
 
-let load_fun_decl f =
-  Ctx.debug "load_fun_decl";
-  let params_with_type = List.map get_typed_field f.fundecl_params in
-  let result_type = fun_decl_result_type f in
-  Ctx.add_fun f.fundecl_name (List.map snd params_with_type) result_type
+let load_fun_decl ctx f =
+  debug ctx "load_fun_decl";
+  let params_with_type = List.map (get_typed_field ctx) f.fundecl_params in
+  let result_type = fun_decl_result_type ctx f in
+  add_fun ctx f.fundecl_name (List.map snd params_with_type) result_type
 
-let rec load_decls = function
+let rec load_decls ctx = function
   | [] -> ()
   | Fun_decl f :: decls ->
-    load_fun_decl f;
-    load_decls decls
+    load_fun_decl ctx f;
+    load_decls ctx decls
   | _ -> raise Not_implemented
 
 let typecheck ?(debug = true) program =
-  Ctx.set_debug debug;
-  Ctx.debug "typecheck";
-  load_decls program;
-  typecheck_decls program
+  let ctx =
+    {
+      tenv = base_tenv ;
+      venv = {
+        parent = None ;
+        current = base_venv ;
+      } ;
+      debug ;
+    }
+  in
+  load_decls ctx program;
+  typecheck_decls ctx program
