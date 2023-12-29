@@ -98,6 +98,7 @@ type type_error =
   | Binop_expr_type of binop * ty * ty
   | Binop_expr_match of binop * ty * ty
   | Unop_mismatch of unop * ty * ty
+  | Call_record_field of var
   | Call_arg_size of string * int * int
   | Call_arg_types of string * ty list * ty list
   | Record_field_mismatch of string * (string * ty) list * (string * ty) list
@@ -111,8 +112,8 @@ let rec typecheck_expr ctx = function
   | Number_expr _ -> Number_ty
   | String_expr _ -> String_ty
   | Var_expr (v, _) -> typecheck_var ctx v
-  | Let_expr (name, expr, pos) ->
-    typecheck_let_expr ctx name expr pos
+  | Let_expr (var, expr, pos) ->
+    typecheck_let_expr ctx var expr pos
   | If_expr (cond_expr, then_exprs, else_exprs, pos) ->
     typecheck_if_expr ctx cond_expr then_exprs else_exprs pos
   | While_expr (cond_expr, body_exprs, pos) ->
@@ -121,8 +122,8 @@ let rec typecheck_expr ctx = function
     typecheck_binop_expr ctx binop lhs_expr rhs_expr pos
   | Unop_expr (unop, expr, pos) ->
     typecheck_unop_expr ctx unop expr pos
-  | Call_expr (name, args, pos) ->
-    typecheck_call_expr ctx name args pos
+  | Call_expr (var, args, pos) ->
+    typecheck_call_expr ctx var args pos
   | Record_expr (name, args, pos) ->
     typecheck_record_expr ctx name args pos
 
@@ -142,17 +143,24 @@ and typecheck_var ctx = function
     end
     | t -> raise (Type_error (Record_expected t, pos))
 
-and typecheck_let_expr ctx name expr pos =
+and typecheck_let_expr ctx var expr pos =
   debug ctx "typecheck_let_expr";
   let expr_ty = typecheck_expr ctx expr in
-    match find_var ctx name with
-    | Some ty ->
+  match var with
+  | Simple_var (var_name, _) -> begin
+    match find_var ctx var_name with
+    | Some var_ty ->
       (* mutating a var is OK if types are the same *)
-      if ty = expr_ty then ty else
-        raise (Type_error (Let_mutation (ty, expr_ty), pos))
+      if var_ty = expr_ty then var_ty else
+        raise (Type_error (Let_mutation (var_ty, expr_ty), pos))
     | None ->
-      add_var ctx name expr_ty;
+      add_var ctx var_name expr_ty;
       expr_ty
+    end
+  | Field_var _ ->
+    let var_ty = typecheck_var ctx var in
+    if var_ty = expr_ty then var_ty else
+      raise (Type_error (Let_mutation (var_ty, expr_ty), pos))
 
 and typecheck_if_expr ctx cond_expr then_exprs else_exprs pos =
   debug ctx "typecheck_if_expr";
@@ -216,24 +224,27 @@ and typecheck_unop_expr ctx unop expr pos =
     if expr_type = Number_ty then Number_ty else
       raise (Type_error (Unop_mismatch (unop, Number_ty, expr_type), pos))
 
-and typecheck_call_expr ctx name args pos =
+and typecheck_call_expr ctx var args pos =
   debug ctx "typecheck_call_expr";
-  match find_fun ctx name with
-  | Some (param_types, result_type) ->
-    let given_arg_length = List.length args in
-    let defined_arg_length = List.length param_types in
-    if given_arg_length <> defined_arg_length then
-      raise (Type_error (Call_arg_size (name, defined_arg_length, given_arg_length), pos))
-    else
-      let arg_types = List.map (typecheck_expr ctx) args in
-      let compare_args (defined, passed) =
-        if defined = Any_ty then true else defined = passed
-      in
-      if List.for_all compare_args (List.combine param_types arg_types)
-        then result_type
-        else raise (Type_error (Call_arg_types (name, param_types, arg_types), pos))
-  | None ->
-    raise (Type_error (Fun_not_found name, pos))
+  match var with
+  | Field_var _ -> raise (Type_error (Call_record_field var, pos))
+  | Simple_var (name, _) ->
+    match find_fun ctx name with
+    | Some (param_types, result_type) ->
+      let given_arg_length = List.length args in
+      let defined_arg_length = List.length param_types in
+      if given_arg_length <> defined_arg_length then
+        raise (Type_error (Call_arg_size (name, defined_arg_length, given_arg_length), pos))
+      else
+        let arg_types = List.map (typecheck_expr ctx) args in
+        let compare_args (defined, passed) =
+          if defined = Any_ty then true else defined = passed
+        in
+        if List.for_all compare_args (List.combine param_types arg_types)
+          then result_type
+          else raise (Type_error (Call_arg_types (name, param_types, arg_types), pos))
+    | None ->
+      raise (Type_error (Fun_not_found name, pos))
 
 and typecheck_record_expr ctx name args pos =
   let get_field_type (name, expr) = (name, typecheck_expr ctx expr) in

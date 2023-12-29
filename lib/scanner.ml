@@ -207,13 +207,13 @@ let rec maybe_expression_list ctx =
       expression_list [e]
     | _ -> [e]
 
-and expression_call name ctx =
+and expression_call var ctx =
   debug ctx "expression_call";
   let cpos = pos ctx in
   expect ctx LPAREN;
   let args = maybe_expression_list ctx in
   expect ctx RPAREN;
-  Call_expr (name, args, cpos)
+  Call_expr (var, args, cpos)
 
 and field_var parent_var ctx =
   debug ctx "field_var";
@@ -247,9 +247,22 @@ and record_expression name ctx =
   let rpos = pos ctx in
   expect ctx LPAREN;
   let field_expressions = record_field_list ctx in
-  (* field expressions *)
   expect ctx RPAREN;
   Record_expr (name, field_expressions, rpos)
+
+and parse_var ctx =
+  match advance ctx with
+  | ID name ->
+    eat_peek ctx;
+    begin
+      match peek ctx with
+      | DOT ->
+        let vpos = pos ctx in
+        let fvar = field_var (Simple_var (name, vpos)) ctx in
+        fvar
+      | _ -> Simple_var (name, pos ctx)
+    end
+  | t -> raise (Parse_error (Expected_ident t, pos ctx))
 
 and base_expression ctx =
   debug ctx "expression";
@@ -257,18 +270,13 @@ and base_expression ctx =
   | RID name ->
     eat_peek ctx;
     Some (record_expression name ctx)
-  | ID name ->
-    eat_peek ctx;
+  | ID _ ->
+    let ipos = pos ctx in
+    let var = parse_var ctx in
     begin
       match peek ctx with
-      | LPAREN -> Some (expression_call name ctx)
-      | DOT ->
-        let vpos = pos ctx in
-        let fvar = field_var (Simple_var (name, vpos)) ctx in
-        Some (Var_expr (fvar, vpos))
-      | _ ->
-        let vpos = pos ctx in
-        Some (Var_expr (Simple_var (name, vpos), vpos))
+      | LPAREN -> Some (expression_call var ctx)
+      | _ -> Some (Var_expr (var, ipos))
     end
   | STRING s ->
     eat_peek ctx;
@@ -325,12 +333,12 @@ and parse_expression ctx =
   | None -> None
   | Some lhs -> Some (parse_expression_1 ctx lhs 0)
 
-let assignment_statement name ctx =
+let assignment_statement var ctx =
   debug ctx "assignment_statement";
   expect ctx EQUAL;
   match parse_expression ctx with
   | None -> raise (Parse_error (Expected_expression, pos ctx))
-  | Some expr -> Let_expr (name, expr, pos ctx)
+  | Some expr -> Let_expr (var, expr, pos ctx)
 
 let rec while_statement ctx =
   debug ctx "while_statement";
@@ -361,15 +369,14 @@ and if_statement ctx =
 and statement ctx =
   debug ctx "statement";
   match peek ctx with
-  | ID name ->
-    eat_peek ctx;
+  | ID _ ->
+    let ipos = pos ctx in
+    let var = parse_var ctx in
     begin
       match peek ctx with
-      | LPAREN -> Some (expression_call name ctx)
-      | EQUAL -> Some (assignment_statement name ctx)
-      | _ ->
-        (* TODO: CHECK FOR FIELD VAR ? *)
-        Some (Var_expr (Simple_var (name, pos ctx), pos ctx))
+      | LPAREN -> Some (expression_call var ctx)
+      | EQUAL -> Some (assignment_statement var ctx)
+      | _ -> Some (Var_expr (var, ipos))
     end
   | WHILE -> Some (while_statement ctx)
   | IF -> Some (if_statement ctx)

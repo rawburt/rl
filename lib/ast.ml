@@ -25,12 +25,12 @@ type expr =
   | Number_expr of int * pos
   | String_expr of string * pos
   | Var_expr of var * pos
-  | Let_expr of string * expr * pos
+  | Let_expr of var * expr * pos
   | If_expr of expr * expr list * expr list * pos
   | While_expr of expr * expr list * pos
   | Binop_expr of binop * expr * expr * pos
   | Unop_expr of unop * expr * pos
-  | Call_expr of string * expr list * pos
+  | Call_expr of var * expr list * pos
   | Record_expr of string * (string * expr) list * pos
 
 type field = {

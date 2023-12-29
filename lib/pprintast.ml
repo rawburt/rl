@@ -17,8 +17,8 @@ let pp_unop ppf = function
   | Not_unop -> fprintf ppf "!"
   | Neg_unop -> fprintf ppf "-"
 
-let rec pp_let_expr ppf name expr =
-  fprintf ppf "@[%s = %a@]" name pp_expr expr
+let rec pp_let_expr ppf var expr =
+  fprintf ppf "@[%a = %a@]" pp_var var pp_expr expr
 
 and pp_if_expr ppf cond_expr then_expr else_expr =
   fprintf ppf "@[<v>if %a do@;<0 2>@[<v 0>%a@]else@;<0 2>@[<v 0>%a@]@;end@]"
@@ -40,8 +40,8 @@ and pp_binop_expr ppf binop lhs_expr rhs_expr =
 and pp_unop_expr ppf unop expr =
   fprintf ppf "%a %a" pp_unop unop pp_expr expr
 
-and pp_call_expr ppf name args =
-  fprintf ppf "%s(%a)" name pp_call_args args
+and pp_call_expr ppf var args =
+  fprintf ppf "%a(%a)" pp_var var pp_call_args args
 
 and pp_record_expr ppf name args =
   fprintf ppf "%s(%a)" name pp_record_args args
@@ -63,17 +63,17 @@ and pp_expr_list ppf = function
   | exp :: exps ->
       fprintf ppf "%a@;%a" pp_expr exp pp_expr_list exps
 
-and pp_var_expr ppf = function
+and pp_var ppf = function
   | Simple_var (name, _) -> fprintf ppf "%s" name
   | Field_var (parent, name, _) ->
-    fprintf ppf "%a.%s" pp_var_expr parent name
+    fprintf ppf "%a.%s" pp_var parent name
 
 and pp_expr ppf = function
   | Bool_expr (b, _) -> fprintf ppf "%B" b
   | Number_expr (n, _) -> fprintf ppf "%d" n
   | String_expr (s, _) -> fprintf ppf "\"%s\"" s
-  | Var_expr (v, _) -> pp_var_expr ppf v
-  | Let_expr (name, expr, _) -> pp_let_expr ppf name expr
+  | Var_expr (v, _) -> pp_var ppf v
+  | Let_expr (var, expr, _) -> pp_let_expr ppf var expr
   | If_expr (cond_expr, then_expr, else_expr, _) ->
     pp_if_expr ppf cond_expr then_expr else_expr
   | While_expr (cond_expr, body_expr, _) ->
@@ -82,8 +82,8 @@ and pp_expr ppf = function
     pp_binop_expr ppf binop lhs_expr rhs_expr
   | Unop_expr (unop, expr, _) ->
     pp_unop_expr ppf unop expr
-  | Call_expr (name, args, _) ->
-    pp_call_expr ppf name args
+  | Call_expr (var, args, _) ->
+    pp_call_expr ppf var args
   | Record_expr (name, args, _) ->
     pp_record_expr ppf name args
 

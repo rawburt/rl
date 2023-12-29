@@ -18,5 +18,9 @@ def main do
       location: "Portland"
     )
   )
+  # a birthday? sure!
+  robert.age = 36
+  # a new job? nice!
+  robert.job.title = "mr manager"
   output_person(robert)
 end
