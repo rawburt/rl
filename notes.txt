@@ -1,0 +1,6 @@
+--- TODO:
+check duplicate function decls
+check duplicate record decls
+check function field name duplicates
+check record field name duplicates
+empty records

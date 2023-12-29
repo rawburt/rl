@@ -3,6 +3,7 @@ open Ast
 type token =
   | LPAREN
   | RPAREN
+  | DOT
   | EQUAL
   | PLUS
   | MINUS
@@ -27,15 +28,17 @@ type token =
   | ELSE
   | TRUE
   | FALSE
-  | TYPE
+  | RECORD
   | EOF
   | NUMBER of int
   | STRING of string
   | ID of string
+  | RID of string
 
 let string_of_token = function
   | LPAREN -> "LPAREN"
   | RPAREN -> "RPAREN"
+  | DOT -> "DOT"
   | EQUAL -> "EQUAL"
   | PLUS -> "PLUS"
   | MINUS -> "MINUS"
@@ -60,11 +63,12 @@ let string_of_token = function
   | ELSE -> "ELSE"
   | TRUE -> "TRUE"
   | FALSE -> "FALSE"
-  | TYPE -> "TYE"
+  | RECORD -> "RECORD"
   | EOF -> "EOF"
   | NUMBER n -> "NUMBER " ^ string_of_int n
   | STRING s -> "STRING \"" ^ s ^ "\""
   | ID id -> "ID " ^ id
+  | RID rid -> "RID " ^ rid
 
 let tok_prec = function
   | EQ -> 10
@@ -106,14 +110,14 @@ type ctx = {
 type parse_error =
   | Unexpected_token of token * token
   | Expected_ident of token
+  | Expected_record_ident of token
+  | Expected_type_identifier of token
   | Expected_decl of token
   | Expected_statement of token
   | Expected_expression
   | Expected_binop of token
 
 exception Parse_error of parse_error * pos
-
-exception Not_implemented
 
 let debug ctx msg = if ctx.debug then print_endline msg
 
@@ -150,6 +154,12 @@ let expect_id ctx =
   match advance ctx with
   | ID id -> id
   | t -> raise (Parse_error (Expected_ident t, pos ctx))
+
+let expect_rid ctx =
+  debug ctx "expect_rid";
+  match advance ctx with
+  | RID rid -> rid
+  | t -> raise (Parse_error (Expected_record_ident t, pos ctx))
 
 let expect ctx token =
   debug ctx ("expect " ^ string_of_token token);
@@ -205,15 +215,60 @@ and expression_call name ctx =
   expect ctx RPAREN;
   Call_expr (name, args, cpos)
 
+and field_var parent_var ctx =
+  debug ctx "field_var";
+  let fpos = pos ctx in
+  expect ctx DOT;
+  let id = expect_id ctx in
+  let current_var = Field_var (parent_var, id, fpos) in
+  match peek ctx with
+  | DOT -> field_var current_var ctx
+  | _ -> current_var
+
+and record_field_list ctx =
+  let rec all_fields fields =
+    match peek ctx with
+    | COMMA ->
+      eat_peek ctx;
+      let field_name = expect_id ctx in
+      expect ctx COLON;
+      let field_expr = expect_expression ctx in
+      let new_field = (field_name, field_expr) in
+      all_fields (new_field :: fields)
+    | _ -> List.rev fields
+  in
+  let field_name = expect_id ctx in
+  expect ctx COLON;
+  let field_expr = expect_expression ctx in
+  all_fields [(field_name, field_expr)]
+
+and record_expression name ctx =
+  debug ctx "record_expression";
+  let rpos = pos ctx in
+  expect ctx LPAREN;
+  let field_expressions = record_field_list ctx in
+  (* field expressions *)
+  expect ctx RPAREN;
+  Record_expr (name, field_expressions, rpos)
+
 and base_expression ctx =
   debug ctx "expression";
   match peek ctx with
+  | RID name ->
+    eat_peek ctx;
+    Some (record_expression name ctx)
   | ID name ->
     eat_peek ctx;
     begin
       match peek ctx with
       | LPAREN -> Some (expression_call name ctx)
-      | _ -> Some (Var_expr (name, pos ctx))
+      | DOT ->
+        let vpos = pos ctx in
+        let fvar = field_var (Simple_var (name, vpos)) ctx in
+        Some (Var_expr (fvar, vpos))
+      | _ ->
+        let vpos = pos ctx in
+        Some (Var_expr (Simple_var (name, vpos), vpos))
     end
   | STRING s ->
     eat_peek ctx;
@@ -312,7 +367,9 @@ and statement ctx =
       match peek ctx with
       | LPAREN -> Some (expression_call name ctx)
       | EQUAL -> Some (assignment_statement name ctx)
-      | _ -> Some (Var_expr (name, pos ctx))
+      | _ ->
+        (* TODO: CHECK FOR FIELD VAR ? *)
+        Some (Var_expr (Simple_var (name, pos ctx), pos ctx))
     end
   | WHILE -> Some (while_statement ctx)
   | IF -> Some (if_statement ctx)
@@ -332,10 +389,15 @@ let param_field ctx =
   let field_pos = pos ctx in
   let field_name = expect_id ctx in
   expect ctx COLON;
-  let field_type = expect_id ctx in
+  let field_type =
+    match advance ctx with
+    | ID id -> id
+    | RID rid -> rid
+    | t -> raise (Parse_error (Expected_type_identifier t, pos ctx))
+  in
   { field_name ; field_type ; field_pos }
 
-let fun_decl_params ctx =
+let param_field_list ctx =
   debug ctx "fun_decl_params";
   let rec fields f =
     match peek ctx with
@@ -353,7 +415,7 @@ let maybe_fun_decl_params ctx =
   match peek ctx with
   | LPAREN ->
     eat_peek ctx;
-    let fparams = fun_decl_params ctx in
+    let fparams = param_field_list ctx in
     expect ctx RPAREN;
     Some fparams
   | _ -> None
@@ -384,7 +446,19 @@ let scan_fun_decl ctx =
     fundecl_pos = fpos ;
   }
 
-let scan_type_decl _ctx = raise Not_implemented
+let scan_record_decl ctx =
+  debug ctx "scan_record_decl";
+  expect ctx RECORD;
+  let rpos = pos ctx in
+  let rid = expect_rid ctx in
+  expect ctx LPAREN;
+  let fields = param_field_list ctx in
+  expect ctx RPAREN;
+  Record_decl {
+    recdecl_pos = rpos ;
+    recdecl_name = rid ;
+    recdecl_params = fields ;
+  }
 
 let scan_program read_token lexbuf cfg_debug =
   let ctx = { lexbuf ; read_token ; peek = None ; debug = cfg_debug } in
@@ -395,9 +469,9 @@ let scan_program read_token lexbuf cfg_debug =
     | DEF ->
       let fdec = scan_fun_decl ctx in
       fdec :: (program ())
-    | TYPE ->
-      let tdec = scan_type_decl ctx in
-      tdec :: (program ())
+    | RECORD ->
+      let rdec = scan_record_decl ctx in
+      rdec :: (program ())
     | t -> raise (Parse_error (Expected_decl t, pos ctx))
   in
   program ()

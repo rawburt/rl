@@ -17,6 +17,7 @@ let newline = '\r' | '\n' | "\r\n"
 rule read_token = parse
   | "(" { LPAREN }
   | ")" { RPAREN }
+  | "." { DOT }
   | "=" { EQUAL }
   | "+" { PLUS }
   | "-" { MINUS }
@@ -39,12 +40,13 @@ rule read_token = parse
   | "while" { WHILE }
   | "if" { IF }
   | "else" { ELSE }
+  | "record" { RECORD }
   | "true" { TRUE }
   | "false" { FALSE }
-  | "type" { TYPE }
   | [' ' '\t']+ { read_token lexbuf }
   | "#" { read_comment lexbuf }
   | '-'? ['0'-'9']+ { NUMBER (int_of_string (Lexing.lexeme lexbuf)) }
+  | ['A'-'Z'] (['a'-'z'] | ['A'-'Z'])* { RID (Lexing.lexeme lexbuf) }
   | ['a'-'z'] (['a'-'z'] | '_')* { ID (Lexing.lexeme lexbuf) }
   | '"' { read_string (Buffer.create 17) lexbuf }
   | newline { next_line lexbuf; read_token lexbuf }

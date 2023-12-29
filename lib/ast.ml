@@ -16,17 +16,22 @@ type binop =
   | Gt_binop
   | Ge_binop
 
+type var =
+  | Simple_var of string * pos
+  | Field_var of var * string * pos
+
 type expr =
   | Bool_expr of bool * pos
   | Number_expr of int * pos
   | String_expr of string * pos
-  | Var_expr of string * pos
+  | Var_expr of var * pos
   | Let_expr of string * expr * pos
   | If_expr of expr * expr list * expr list * pos
   | While_expr of expr * expr list * pos
   | Binop_expr of binop * expr * expr * pos
   | Unop_expr of unop * expr * pos
   | Call_expr of string * expr list * pos
+  | Record_expr of string * (string * expr) list * pos
 
 type field = {
   field_name : string ;
@@ -42,17 +47,12 @@ type fundecl = {
   fundecl_pos : pos ;
 }
 
-type typeconst = {
-  typeconst_name : string ;
-  typeconst_pos : pos ;
-}
-
-type typedecl = {
-  typedecl_name : string ;
-  typedecl_constructors : typeconst list ;
-  typedecl_pos : pos ;
+type recdecl = {
+  recdecl_name : string ;
+  recdecl_params : field list ;
+  recdecl_pos : pos ;
 }
 
 type decl =
   | Fun_decl of fundecl
-  | Type_decl of typedecl
+  | Record_decl of recdecl

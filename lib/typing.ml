@@ -44,6 +44,9 @@ let add_fun ctx name params result =
 let add_var ctx name ty =
   Hashtbl.add ctx.venv.current name (Var_entry ty)
 
+let add_record_type ctx name field_types =
+  Hashtbl.add ctx.tenv name (Record_ty (name, field_types))
+
 let rec venv_lookup ctx v k =
   debug ctx "venv_lookup";
   match Hashtbl.find_opt v.current k with
@@ -97,20 +100,17 @@ type type_error =
   | Unop_mismatch of unop * ty * ty
   | Call_arg_size of string * int * int
   | Call_arg_types of string * ty list * ty list
+  | Record_field_mismatch of string * (string * ty) list * (string * ty) list
+  | Record_expected of ty
+  | Record_field_not_found of string * (string * ty) list * string
 
 exception Type_error of type_error * pos
-
-exception Not_implemented
 
 let rec typecheck_expr ctx = function
   | Bool_expr _ -> Bool_ty
   | Number_expr _ -> Number_ty
   | String_expr _ -> String_ty
-  | Var_expr (name, pos) -> begin
-    match find_var ctx name with
-    | Some ty -> ty
-    | None -> raise (Type_error (Var_not_found name, pos))
-  end
+  | Var_expr (v, _) -> typecheck_var ctx v
   | Let_expr (name, expr, pos) ->
     typecheck_let_expr ctx name expr pos
   | If_expr (cond_expr, then_exprs, else_exprs, pos) ->
@@ -123,6 +123,24 @@ let rec typecheck_expr ctx = function
     typecheck_unop_expr ctx unop expr pos
   | Call_expr (name, args, pos) ->
     typecheck_call_expr ctx name args pos
+  | Record_expr (name, args, pos) ->
+    typecheck_record_expr ctx name args pos
+
+and typecheck_var ctx = function
+ | Simple_var (name, pos) -> begin
+    match find_var ctx name with
+    | Some ty -> ty
+    | None -> raise (Type_error (Var_not_found name, pos))
+  end
+  | Field_var (parent, name, pos) ->
+    match typecheck_var ctx parent with
+    | Record_ty (record_name, record_fields) ->
+      let compare_field (n, _) = n = name in begin
+      match List.find_opt compare_field record_fields with
+      | Some (_, field_type) -> field_type
+      | None -> raise (Type_error (Record_field_not_found (record_name, record_fields, name), pos))
+    end
+    | t -> raise (Type_error (Record_expected t, pos))
 
 and typecheck_let_expr ctx name expr pos =
   debug ctx "typecheck_let_expr";
@@ -217,6 +235,18 @@ and typecheck_call_expr ctx name args pos =
   | None ->
     raise (Type_error (Fun_not_found name, pos))
 
+and typecheck_record_expr ctx name args pos =
+  let get_field_type (name, expr) = (name, typecheck_expr ctx expr) in
+  let fields_with_types = List.map get_field_type args in
+  match tenv_lookup ctx name with
+  | Some (Record_ty (name, fields)) ->
+    let sorted_fields = List.sort compare fields in
+    let sorted_args = List.sort compare fields_with_types in
+    if List.equal (=) sorted_fields sorted_args
+      then Record_ty (name, fields)
+      else raise (Type_error (Record_field_mismatch (name, sorted_fields, sorted_args), pos))
+  | _ -> raise (Type_error (Type_not_found name, pos))
+
 (* type check expressions in list and return the last expression type *)
 and typecheck_exprs ctx = function
   (* empty blocks are of type unit *)
@@ -256,7 +286,9 @@ let rec typecheck_decls ctx = function
   | Fun_decl f :: decls ->
     typecheck_fun_decl ctx f;
     typecheck_decls ctx decls
-  | _ -> raise Not_implemented
+  | Record_decl _ :: decls ->
+    (* nothing to do *)
+    typecheck_decls ctx decls
 
 let load_fun_decl ctx f =
   debug ctx "load_fun_decl";
@@ -264,12 +296,20 @@ let load_fun_decl ctx f =
   let result_type = fun_decl_result_type ctx f in
   add_fun ctx f.fundecl_name (List.map snd params_with_type) result_type
 
+let load_record_decl ctx r =
+  debug ctx "load_record_decl";
+  (* TODO: order independent record definitions *)
+  let fields_with_types = List.map (get_typed_field ctx) r.recdecl_params in
+  add_record_type ctx r.recdecl_name fields_with_types
+
 let rec load_decls ctx = function
   | [] -> ()
   | Fun_decl f :: decls ->
     load_fun_decl ctx f;
     load_decls ctx decls
-  | _ -> raise Not_implemented
+  | Record_decl r :: decls ->
+    load_record_decl ctx r;
+    load_decls ctx decls
 
 let typecheck ?(debug = true) program =
   let ctx =
