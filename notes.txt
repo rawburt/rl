@@ -4,3 +4,4 @@ check duplicate record decls
 check function field name duplicates
 check record field name duplicates
 empty records
+check reserved words

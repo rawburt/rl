@@ -1,0 +1,94 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "rl",
+	"patterns": [
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#comments"
+		},
+		{
+			"include": "#constants"
+		},
+		{
+			"include": "#entities"
+		}
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [
+				{
+					"name": "keyword.control.rl",
+					"match": "\\b(if|do|else|end|while|def|record)\\b"
+				},
+				{
+					"name": "keyword.operator.comparison.rl",
+					"match": "(<=|>=|==|!=|<|>)"
+				},
+				{
+					"name": "keyword.operator.arithmetic.rl",
+					"match": "(\\+|\\-|/|\\*)"
+				  },
+				  {
+					"name": "keyword.operator.assignment.rl",
+					"match": "="
+				  }
+			]
+		},
+		"strings": {
+			"name": "string.quoted.double.rl",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.rl",
+					"match": "\\\\."
+				}
+			]
+		},
+		"comments": {
+			"name": "comment.line.rl",
+			"begin": "#",
+			"end": "\n"
+		},
+		"constants": {
+			"patterns": [
+				{
+					"name":"constant.language.rl",
+					"match":"\\b(true|false)\\b"
+				},
+				{
+					"name":"constant.numeric.rl",
+					"match":"\\d"
+				}
+			]
+		},
+		"entities": {
+			"patterns":[
+				{
+					"name":"entity.name.type.rl",
+					"match":"\\b(string|number|bool|[A-Z]+[A-Za-z]*)\\b"
+				},
+				{
+					"begin":"\\b([a-z]+[a-z_]*)\\(",
+					"end":"\\)",
+					"patterns":[
+						{
+							"include":"$self"
+						}
+					],
+					"captures": {
+						"1": {
+							"name":"entity.name.function.rl"
+						}
+					}
+				}
+			]
+		}
+	},
+	"scopeName": "source.rl"
+}

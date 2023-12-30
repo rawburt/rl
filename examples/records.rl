@@ -1,8 +1,8 @@
-record Job(title : string, location : string)
+record Job(title: string, location: string)
 
-record Person(name : string, age : number, job : Job)
+record Person(name: string, age: number, job: Job)
 
-def output_person(person : Person) do
+def output_person(person: Person) do
   output(person.name)
   output(person.age)
   output(person.job.title)

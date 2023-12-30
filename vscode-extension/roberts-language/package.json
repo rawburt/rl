@@ -1,0 +1,25 @@
+{
+  "name": "roberts-language",
+  "displayName": "roberts-language",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "rl",
+      "aliases": ["rl", "rl"],
+      "extensions": [".rl"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "rl",
+      "scopeName": "source.rl",
+      "path": "./syntaxes/rl.tmLanguage.json"
+    }]
+  }
+}
