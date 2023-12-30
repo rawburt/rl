@@ -17,4 +17,6 @@ end
 def main do
   party = Party(name: "Robert's Birthday Party", day: Friday)
   show_day(party.day)
+  party.day = Sunday
+  show_day(party.day)
 end

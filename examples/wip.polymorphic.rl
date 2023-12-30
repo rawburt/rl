@@ -10,8 +10,8 @@ end
 
 def lookup(key: string, map: Map(a)) -> Option(a) do
   match map do
-    Empty do None end
-    Entry(k, v, next) do
+    | Empty do None end
+    | Entry(k, v, next) do
       if k == key do
         Some(v)
       else

@@ -27,6 +27,10 @@
 				},
 				{
 					"name": "keyword.control.rl",
+					"match": "->"
+				},
+				{
+					"name": "keyword.control.rl",
 					"match": "\\b(if|do|else|end|while|match|def|record|type)\\b"
 				},
 				{
@@ -75,7 +79,7 @@
 			"patterns":[
 				{
 					"name":"entity.name.type.rl",
-					"match":"\\b(string|number|bool|[A-Z]+[A-Za-z]*)\\b"
+					"match":"\\b(string|number|bool|unit|[A-Z]+[A-Za-z]*)\\b"
 				},
 				{
 					"begin":"\\b([a-z]+[a-z_]*)\\(",
