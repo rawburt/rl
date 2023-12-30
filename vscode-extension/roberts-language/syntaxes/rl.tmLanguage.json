@@ -3,6 +3,9 @@
 	"name": "rl",
 	"patterns": [
 		{
+			"include": "#entities"
+		},
+		{
 			"include": "#keywords"
 		},
 		{
@@ -13,9 +16,6 @@
 		},
 		{
 			"include": "#constants"
-		},
-		{
-			"include": "#entities"
 		}
 	],
 	"repository": {
@@ -23,7 +23,11 @@
 			"patterns": [
 				{
 					"name": "keyword.control.rl",
-					"match": "\\b(if|do|else|end|while|def|record)\\b"
+					"match": "\\|"
+				},
+				{
+					"name": "keyword.control.rl",
+					"match": "\\b(if|do|else|end|while|match|def|record|type)\\b"
 				},
 				{
 					"name": "keyword.operator.comparison.rl",
@@ -83,7 +87,26 @@
 					],
 					"captures": {
 						"1": {
+							"name":"entity.name.function.with-args.rl"
+						}
+					}
+				},
+				{
+					"match":"\\b(def)\\s([a-z]+[a-z_]*)\\s(do)",
+					"patterns":[
+						{
+							"include":"$self"
+						}
+					],
+					"captures": {
+						"1": {
+							"name":"keyword.control.rl"
+						},
+						"2": {
 							"name":"entity.name.function.rl"
+						},
+						"3": {
+							"name":"keyword.control.rl"
 						}
 					}
 				}
